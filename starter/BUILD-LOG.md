@@ -33,6 +33,24 @@ What did the starting line actually look like, and which failure surprised you?_
 _What did you expect each failure mode to look like before you ran it? Which one behaved
 differently from your expectation, and what did that tell you?_
 
+### 2026-09-26 15:02 — Baseline JWT suite
+
+Before implementing `verifyAccessToken`, I expected the JWT suite to fail because the function was still the supplied stub.
+
+Observed: all 43 cases failed with the `NOT_IMPLEMENTED` error, including the valid-token round trip.
+
+The useful part of the failure output was the contract itself: valid claims must survive unchanged, while malformed structure, algorithm substitution, signature failures, expired/missing `exp`, wrong `iss`/`aud`, missing/empty `jti`, and opaque refresh tokens must all become `401 UNAUTHENTICATED`.
+
+This gives me the baseline; I will implement the verifier against these explicit failure modes rather than weakening the test expectations.
+
+### 2026-09-26 15:08 — Verifier implementation
+
+Implemented `verifyAccessToken` using the supplied HS256 signing format.
+
+The first run after implementation passed all 43 JWT cases: valid claims round-tripped, malformed tokens returned 401, algorithm substitution was rejected, signatures were checked with `timingSafeEqual`, `exp == now` was treated as expired, and issuer/audience/jti validation passed.
+
+The baseline had been 0/43; the final result was 43/43. I kept the verifier limited to token authenticity and claim validation rather than putting authorization logic into the JWT.
+
 ## Phase 2 — caller context and the resolution engine
 
 _This is where most people's first model is wrong. Write down the model you started with, the

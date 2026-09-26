@@ -71,12 +71,75 @@ export function issueAccessToken({ userId, orgId, role, permVersion }, secret) {
 // `node scripts/check-jwt.js` is the public test suite for this function.
 // ---------------------------------------------------------------------------
 export function verifyAccessToken(token, secret) {
-  // YOURS TO WRITE. Every failure mode listed above must be a 401 UNAUTHENTICATED.
-  // `node scripts/check-jwt.js` is the public suite for this function.
-  throw Object.assign(
-    new Error('TODO: server/auth.js — verifyAccessToken() is yours to write (AUTH-DATA-MODEL.md §10).'),
-    { code: 'NOT_IMPLEMENTED' }
-  );
+  try {
+    if (typeof token !== 'string') {
+      throw new Error('invalid token');
+    }
+
+    const parts = token.split('.');
+    if (parts.length !== 3) {
+      throw new Error('invalid token');
+    }
+
+    const [encodedHeader, encodedPayload, encodedSignature] = parts;
+
+    const header = JSON.parse(unb64(encodedHeader).toString('utf8'));
+    const claims = JSON.parse(unb64(encodedPayload).toString('utf8'));
+
+    if (
+      header === null ||
+      typeof header !== 'object' ||
+      Array.isArray(header)
+    ) {
+      throw new Error('invalid header');
+    }
+
+    if (
+      header.alg !== ALG ||
+      header.typ !== 'JWT'
+    ) {
+      throw new Error('invalid header');
+    }
+
+    if (
+      claims === null ||
+      typeof claims !== 'object' ||
+      Array.isArray(claims)
+    ) {
+      throw new Error('invalid claims');
+    }
+
+    const expectedSignature = createHmac('sha256', secret)
+      .update(`${encodedHeader}.${encodedPayload}`)
+      .digest();
+
+    const actualSignature = unb64(encodedSignature);
+
+    if (
+      actualSignature.length !== expectedSignature.length ||
+      !timingSafeEqual(actualSignature, expectedSignature)
+    ) {
+      throw new Error('invalid signature');
+    }
+
+    const now = Math.floor(Date.now() / 1000);
+
+    if (typeof claims.exp !== 'number' || claims.exp <= now) {
+      throw new Error('expired token');
+    }
+
+    if (claims.iss !== ISS || claims.aud !== AUD) {
+      throw new Error('invalid issuer or audience');
+    }
+
+    if (typeof claims.jti !== 'string' || claims.jti.length === 0) {
+      throw new Error('invalid jti');
+    }
+
+    return claims;
+  } catch {
+    throw unauthenticated('invalid access token');
+  }
 }
 
 
