@@ -132,7 +132,19 @@ export function resolve(db, { userId, orgId, deviceId = null, now = new Date() }
 
 // Batched form for list endpoints: { role, byDevice: { [deviceId]: permissions } }.
 export function resolveDevices(db, { userId, orgId, deviceIds, now = new Date() }) {
-  throw todo('resolveDevices');
+  const uniqueDeviceIds = [...new Set(deviceIds)];
+
+  const byDevice = {};
+
+  for (const deviceId of uniqueDeviceIds) {
+    const result = resolve(db, { userId, orgId, deviceId, now });
+
+    byDevice[deviceId] = result.permissions;
+  }
+
+  const first = resolve(db, {userId, orgId, deviceId: null, now });
+
+  return {role: first.role, byDevice};
 }
 
 export function can(db, ctx, permission, deviceId) {
@@ -143,12 +155,53 @@ export function can(db, ctx, permission, deviceId) {
 
 // Throws 403 carrying the reason code, so a refusal is debuggable.
 export function assertCan(db, ctx, permission, deviceId) {
-  throw todo('assertCan');
+  const result = resolve(db, { userId: ctx.userId, orgId: ctx.orgId, deviceId });
+
+  const entry = result.permissions[permission];
+
+  if (!entry || entry.effect !== 'allow') {
+    throw forbidden('missing permission', entry?.reason ?? 'missing_permission');
+  }
+
+  return true;
 }
 
 // No privilege laundering: you may only grant authority you hold at that scope.
 export function assertMayGrant(db, ctx, patterns, deviceId = null) {
-  throw todo('assertMayGrant');
+  if (!Array.isArray(patterns) || patterns.length === 0) {
+    throw forbidden('missing permission', 'missing_permission');
+  }
+
+  const permissions = db.prepare(`
+    SELECT key
+    FROM permissions
+    ORDER BY key
+  `).all().map(row => row.key);
+
+  const matches = (pattern, permission) =>
+    pattern === '*' ||
+    pattern === permission ||
+    (pattern.endsWith(':*') &&
+      permission.startsWith(pattern.slice(0, -1)));
+
+  for (const pattern of patterns) {
+    const coveredPermissions = permissions.filter(permission =>
+      matches(pattern, permission)
+    );
+
+    // A pattern that covers no known permission cannot grant authority.
+    if (coveredPermissions.length === 0) {
+      throw forbidden('missing permission', 'missing_permission');
+    }
+
+    for (const permission of coveredPermissions) {
+      if (!can(db, ctx, permission, deviceId)) {
+        throw forbidden('missing permission', 'missing_permission');
+      }
+    }
+  }
+
+  return true;
 }
 
 // The compound check: session:start AND the permission for the requested mode, and a

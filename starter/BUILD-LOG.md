@@ -76,6 +76,18 @@ Measurement: `node scripts/check-permissions.js` → 35 passed, 0 failed.
 
 The personalized fixture was useful here: `device:reboot` exists only in the personalized database, with an allow on one device and deny on another, so the implementation remains database-driven rather than relying on the prose role matrix.
 
+### 2026-09-26 16:25 — Permission engine complete
+
+Completed the permission resolution layer and verified it against the repository's permission vectors.
+
+`node scripts/check-permissions.js` passes 35/35. The implementation resolves role permissions from the database, applies exact and wildcard grants, respects device scope and half-open time windows, gives explicit deny precedence, handles cross-org isolation and suspended memberships, and keeps permission decisions centralized in `resolve()`.
+
+Implemented the batched device resolver, `can()`, `assertCan()`, `assertCanStartSession()`, and `assertMayGrant()`.
+
+I initially returned an incorrect permission shape and used two incorrect reason strings; the repository tests exposed those mismatches and I corrected them rather than changing the tests.
+
+Regression check: `node scripts/check-jwt.js` passes 43/43.
+
 ## Phase 3 — orgs, members, invites
 
 _Anything you had to work out that no document states. Invite lifecycle states are a common
