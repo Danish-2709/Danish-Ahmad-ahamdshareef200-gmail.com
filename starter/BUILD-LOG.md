@@ -11,18 +11,17 @@ gives nothing away.
 
 ---
 
-<!-- EXAMPLE — delete this block, keep the shape.
+### 2026-09-26 14:39 — Phase 0 — orientation
 
-## 2026-03-04 · Phase 0 — orientation
+`npm install` completed successfully, but `npm run db:reset` failed because the supplied script uses Unix `rm -f`, which is not available in my PowerShell environment.
 
-Expected the unknown-permission test to fail on my validation code.
-Observed: it passed, with foreign_keys ON, and *also* passed with the pragma removed — so the
-check was never running, and the "pass" was the schema loading fine while enforcing nothing.
-Changed: moved `foreign_keys = ON` to connection open and re-ran; now it raises
-`FOREIGN KEY constraint failed` as the README said it would.
-Note: this is the failure mode where a passing test is worse than a failing one.
+Running the underlying `npm run db:load` exposed a second issue in `scripts/load-db.js`: `new URL(...).pathname` produced an invalid Windows path containing `D:\D:\` and `%20`.
 
--->
+Changed the path conversion to use Node's `fileURLToPath(new URL(...))`, then reran the loader successfully.
+
+The database seeded with 3 organizations, 8 users, 10 memberships, 9 devices, 6 grants, 3 sessions, and 7 audit events.
+
+The personalized fixture also added the `reviewer` role and `device:reboot` permission, showing that roles and permissions must be resolved from the database rather than encoded from the documented matrix..
 
 ## Phase 0 — orientation
 
