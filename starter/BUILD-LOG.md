@@ -56,6 +56,12 @@ The baseline had been 0/43; the final result was 43/43. I kept the verifier limi
 _This is where most people's first model is wrong. Write down the model you started with, the
 observation that broke it, and the model you moved to. Be specific about the observation._
 
+### 2026-09-26 15:41 — Permission baseline
+
+Ran `node scripts/check-permissions.js` before implementing the permission resolver. The suite stopped immediately in `resolve()` because `server/permissions.js` is still the supplied TODO stub and throws `NOT_IMPLEMENTED`.
+
+The DB inspection showed the personalized fixture has the `reviewer` role and `device:reboot` permission, with a device-scoped allow on `dev_p_bb3398_a` and deny on `dev_p_bb3398_b`. I will use the database tables rather than hard-coding the documented role/permission matrix.
+
 ## Phase 3 — orgs, members, invites
 
 _Anything you had to work out that no document states. Invite lifecycle states are a common
