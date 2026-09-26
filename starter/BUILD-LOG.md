@@ -62,6 +62,20 @@ Ran `node scripts/check-permissions.js` before implementing the permission resol
 
 The DB inspection showed the personalized fixture has the `reviewer` role and `device:reboot` permission, with a device-scoped allow on `dev_p_bb3398_a` and deny on `dev_p_bb3398_b`. I will use the database tables rather than hard-coding the documented role/permission matrix.
 
+### 2026-09-26 16:13 — Permission resolver passes
+
+Implemented the permission resolution engine from the database schema and the documented resolution rules.
+
+The first useful implementation exposed two mismatches with the repository's test contract: the resolver needed `permissions[permission].effect` objects rather than a flat array, and the expected implicit-deny reason was `implicit`. I also corrected the non-member reason to `not_a_member` after the test exposed that contract.
+
+The final resolver checks membership, loads the permission catalogue and role baseline from the DB, evaluates active grants including exact and wildcard patterns, applies device scope and half-open time windows, and gives explicit denies precedence over allows.
+
+Implemented `can()` as a thin wrapper over `resolve()`, and implemented the compound session check so `session:start` and the requested device mode permission are checked separately.
+
+Measurement: `node scripts/check-permissions.js` → 35 passed, 0 failed.
+
+The personalized fixture was useful here: `device:reboot` exists only in the personalized database, with an allow on one device and deny on another, so the implementation remains database-driven rather than relying on the prose role matrix.
+
 ## Phase 3 — orgs, members, invites
 
 _Anything you had to work out that no document states. Invite lifecycle states are a common
