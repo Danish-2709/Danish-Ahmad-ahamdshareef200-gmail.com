@@ -21,6 +21,8 @@
 // it that this exercise's prose never mentions. Read the tables; do not encode the
 // documented matrix. Run `npm run personalisation` to see what you are dealing with.
 
+import { forbidden, badRequest } from './http.js';
+
 const todo = (name) =>
   Object.assign(
     new Error(`TODO: server/permissions.js — ${name}() is yours to write (BRIEF.md §3).`),
@@ -83,7 +85,7 @@ export function resolve(db, { userId, orgId, deviceId = null, now = new Date() }
     if (deny) {
       resolved[permission] = {
         allowed: false,
-        source: 'grant',
+        source: `grant:${deny.id}`,
         reason: 'explicit_deny',
         grantId: deny.id
       };
@@ -104,7 +106,7 @@ export function resolve(db, { userId, orgId, deviceId = null, now = new Date() }
     if (allow) {
       resolved[permission] = {
         allowed: true,
-        source: 'grant',
+        source: `grant:${allow.id}`,
         reason: 'grant',
         grantId: allow.id
       };
@@ -210,28 +212,22 @@ export function assertCanStartSession(db, ctx, mode, deviceId) {
   const requiredPermission = MODE_PERMISSION[mode];
 
   if (!requiredPermission) {
-    const error = new Error('invalid session mode');
-    error.status = 400;
-    error.reason = 'invalid_mode';
-    throw error;
+    throw badRequest('invalid session mode', 'invalid_mode');
   }
 
-  const sessionStart = can( db, ctx, 'session:start', deviceId);
+  const sessionStart = can(db, ctx, 'session:start', deviceId);
 
   if (!sessionStart) {
-    const error = new Error('missing session:start permission');
-    error.status = 403;
-    error.reason = 'missing_permission';
-    throw error;
+    throw forbidden('missing session:start permission', 'missing_permission');
   }
 
-  const devicePermission = can( db, ctx, requiredPermission, deviceId);
+  const devicePermission = can(db, ctx, requiredPermission, deviceId);
 
   if (!devicePermission) {
-    const error = new Error(`missing ${requiredPermission} permission`);
-    error.status = 403;
-    error.reason = 'missing_device_permission';
-    throw error;
+    throw forbidden(
+      `missing ${requiredPermission} permission`,
+      'missing_device_permission'
+    );
   }
 
   return true;

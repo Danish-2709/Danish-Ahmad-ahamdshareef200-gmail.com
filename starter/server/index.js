@@ -7,6 +7,7 @@
 //       npm run build && npm start
 
 import http from 'node:http';
+import crypto from 'node:crypto';
 import { readFile, stat } from 'node:fs/promises';
 import { extname, join, normalize } from 'node:path';
 
@@ -23,6 +24,7 @@ const DIST = new URL('../dist/', import.meta.url).pathname;
 
 const db = openDatabase();
 const router = createRouter();
+
 registerRoutes(router, { db, secret: SECRET });
 
 // Routes reachable without a token. Everything else requires a valid JWT.
@@ -33,7 +35,6 @@ const PUBLIC_ROUTES = new Set([
   'POST /v1/invites/:token/accept',
 ]);
 
-// ---------------------------------------------------------------------------
 // The request pipeline. Read this top to bottom and you know how the app works.
 // ---------------------------------------------------------------------------
 async function handleApi(req, res, url) {

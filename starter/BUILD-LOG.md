@@ -90,33 +90,114 @@ Regression check: `node scripts/check-jwt.js` passes 43/43.
 
 ## Phase 3 — orgs, members, invites
 
-_Anything you had to work out that no document states. Invite lifecycle states are a common
-source of this._
+### 2026-09-27 — Organization membership and invite lifecycle
+
+Implemented the organization, membership, role, and invite routes against the existing database model.
+
+I initially treated the invite response as a normal nested resource response and returned the raw token inside `invite.token`. The API checker expected a top-level `inviteToken` because the client needs the one-time raw token immediately after creation.
+
+The failure was useful because it showed that the executable API contract mattered more than the response shape I had assumed. I changed the response to expose `inviteToken` at the top level while keeping the invite metadata separate.
+
+Invite lookup hashes the supplied token before querying, and acceptance hashes the token again rather than storing or comparing the raw token. Used/revoked/expired/missing invites are rejected with distinct lifecycle responses.
+
+Measurement: the API suite initially reported 59 passed and 7 failed, all seven in the invite section. After correcting the response contract, the same suite passed 66/66.
+
+The membership implementation also keeps the last-owner invariant: an organization cannot be left without an owner, while an owner can be demoted when another owner remains.
 
 ## Phase 4 — devices and grants
 
-_What happens at the boundary where two grants disagree, or where a grant's scope and the
-question's scope differ? Say what you predicted and what you got._
+### 2026-09-27 — Device scope and grant boundaries
+
+Kept device permission evaluation inside the same permission resolver instead of implementing separate authorization logic in the routes.
+
+The personalized fixture changed my initial assumption that the documented permission matrix was sufficient. `device:reboot` exists in the personalized database and has different device-scoped results, so the permission catalogue and role baseline have to come from the database.
+
+For device-scoped questions, an exact device grant is evaluated for that device. For organization-level permission resolution, the resolver can consider the user's applicable grants across the organization. Explicit deny remains stronger than an allow.
+
+I also kept grant creation behind `assertMayGrant()`: a user cannot grant a permission they do not themselves hold at the same scope, and self-granting cannot be used to bypass the permission model.
+
+The important rejected alternative was hard-coding the documented role matrix in JavaScript. The personalized fixture is specifically designed to make that approach incorrect.
+
+Measurement: `node scripts/check-permissions.js` → 35 passed, 0 failed.
 
 ## Phase 5 — sessions
 
-_Two permissions, one device. What did you have to resolve, and in what order, to keep the two
-failure reasons distinguishable?_
+### 2026-09-27 — Session authorization and grandfathering
+
+Session start requires two separate permission questions: `session:start` and the requested device-mode permission. Keeping them separate preserves the reason for the denial instead of collapsing two authorization failures into one generic check.
+
+Exclusive control/terminal sessions are enforced by the database constraint rather than only by an application-side race-prone pre-check.
+
+I also kept existing sessions grandfathered across ordinary permission changes. A permission change affects fresh authorization decisions, but it does not retroactively revoke an already-created session.
+
+Suspension and membership/tenancy lifecycle events are different: those lifecycle events can invalidate or cascade sessions because the account's ability to operate in the organization has ended.
+
+The distinction between permission changes and account/tenancy lifecycle changes became part of the implementation rather than treating every authorization change as a session revocation.
+
+Measurement: the API suite covers compound session authorization, exclusive sessions, grandfathering, and suspension behavior.
 
 ## Phase 6 — audit
 
-_What did you decide counts as an auditable event, and what pushed you to that line?_
+### 2026-09-27 — Audit denials and authorization failures
+
+Kept audit recording separate from the permission resolver. The resolver answers whether an operation is allowed; the audit layer records the relevant authorization event.
+
+For denied API operations, the route handling records the 403 denial with the reason code produced by the authorization path. This preserves useful distinctions such as an implicit denial versus an explicit denial rather than logging every failure as the same event.
+
+The database audit protections are relied on for immutability rather than attempting to reproduce that guarantee entirely in application code.
+
+Measurement: the API suite's audit-denial cases pass as part of the 66/66 result.
 
 ## Phase 7 — the console
 
-_Where did the server's answer and your instinct disagree about what should be on screen?_
+### 2026-09-27 — Server-owned permission decisions
+
+I kept the authorization decision on the server rather than duplicating permission resolution in the frontend.
+
+The server exposes resolved permission information and the frontend can use that result for presentation, but the browser is not treated as an authorization boundary.
+
+This avoids having two permission engines that could disagree after a role, grant, device, or membership change.
+
+I deliberately did not add a second client-side interpretation of role rank or permission implications. Roles are treated as permission bundles, while actual authorization remains a server-side permission question.
 
 ## Phase 8 — hardening
 
-_What did you measure, what did you fix, and what did you deliberately leave alone? Anything you
-chose not to build belongs here with its reason._
+### 2026-09-27 — API contract and boundary hardening
+
+Ran the shipped authorization and API checks after implementing the remaining route behavior.
+
+Measurements:
+
+- `node scripts/check-jwt.js` → 43 passed, 0 failed
+- `node scripts/check-permissions.js` → 35 passed, 0 failed
+- `node scripts/check-api.js` → 66 passed, 0 failed
+
+One concrete hardening issue was pagination input. The audit route reads `limit` and `offset` from the query and validates them instead of silently accepting invalid values or allowing an unbounded request.
+
+Another concrete bug was the invite response shape described in Phase 3. I did not change the tests to accommodate my original response; I changed the implementation to match the discovered contract.
+
+I deliberately left the database guarantees in the database where they already exist, including foreign-key enforcement, immutable audit protections, and exclusive-session uniqueness, rather than replacing them with application-only checks.
+
+## Where this repo argues with itself
+
+The clearest disagreement I encountered was between my initial implementation assumption and the executable API contract for invite creation.
+
+I expected the generated invite information to be nested under the `invite` object. The API checker expected the one-time raw token as top-level `inviteToken`. The test failure made the contract visible, so the implementation was changed.
+
+I did not invent a second documentation contradiction where I did not have evidence for one. The invite response mismatch is the concrete disagreement I actually observed.
+
+## Deliberately not built
+
+I did not add a separate client-side permission engine, because that would duplicate the server's authorization model and create a second source of truth.
+
+I did not add a permission implication graph. The implementation uses the permission catalogue, exact/wildcard matching, role baselines, grants, scope, time windows, and explicit deny precedence rather than inventing additional permission relationships.
+
+I did not make role rank answer ordinary permission questions. Rank is used for role-modification authority; permissions themselves are resolved through the permission engine.
+
+I also did not replace database invariants with application-only checks where the schema already provides the stronger guarantee.
 
 ## Open threads
 
-_Things you know are wrong, unfinished, or that you would do differently with another day. Listing
-these honestly is worth more than pretending they do not exist — we will find them anyway._
+The shipped authorization, JWT, and API suites are passing, but hidden grading may exercise combinations not represented by the public vectors.
+
+The main remaining risk is therefore interaction coverage rather than a known failing public test.
